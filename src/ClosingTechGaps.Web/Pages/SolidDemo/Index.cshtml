@@ -1,0 +1,341 @@
+@page
+@model ClosingTechGaps.Web.Pages.SolidDemo.IndexModel
+@{
+    ViewData["Title"] = "SOLID Principles";
+}
+
+<div class="container py-5">
+
+    <div class="text-center mb-5">
+        <h1 class="display-5 fw-bold">SOLID Principles</h1>
+        <p class="lead text-muted col-md-8 mx-auto">
+            How this project applies each SOLID principle — with real file references
+            and the exact design decisions that enforce them.
+        </p>
+        <hr class="my-4" />
+    </div>
+
+    <!-- S -->
+    <div class="card mb-4 border-success shadow-sm">
+        <div class="card-header bg-success text-white d-flex align-items-center gap-2">
+            <span class="fs-4 fw-bold">S</span>
+            <div>
+                <div class="fw-bold">Single Responsibility Principle</div>
+                <small class="opacity-75">A class should have only one reason to change.</small>
+            </div>
+            <span class="badge bg-light text-success ms-auto fs-6">&#10003; Applied</span>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                Every class in this solution has a single, well-defined job. When a requirement changes,
+                only the class responsible for that concern needs to be touched.
+            </p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Class</th>
+                            <th>Single Responsibility</th>
+                            <th>Layer</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>Customer.cs</code></td>
+                            <td>Represents the customer entity and enforces its own invariants via <code>Update()</code></td>
+                            <td><span class="badge bg-primary">Domain</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>CustomerService.cs</code></td>
+                            <td>Orchestrates use cases — delegates persistence to the repository, never queries the DB directly</td>
+                            <td><span class="badge bg-info text-dark">Application</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>CustomerRepository.cs</code></td>
+                            <td>All data access via EF Core — the only class that knows about <code>AppDbContext</code></td>
+                            <td><span class="badge bg-warning text-dark">Infrastructure</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>GlobalExceptionMiddleware.cs</code></td>
+                            <td>Catches unhandled exceptions and writes a uniform JSON error response — nothing else</td>
+                            <td><span class="badge bg-secondary">API</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>IdempotencyFilter.cs</code></td>
+                            <td>Intercepts requests, checks the idempotency store, and replays cached responses</td>
+                            <td><span class="badge bg-secondary">API</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>IndexDemoService.cs</code></td>
+                            <td>Manages the SQLite demo database — seeding, query timing, and EXPLAIN QUERY PLAN</td>
+                            <td><span class="badge bg-warning text-dark">Infrastructure</span></td>
+                        </tr>
+                        <tr>
+                            <td><code>ApiBaseUrlFilter.cs</code></td>
+                            <td>Injects the API base URL into <code>ViewData</code> for every Razor page — nothing else</td>
+                            <td><span class="badge bg-danger">Web</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- O -->
+    <div class="card mb-4 border-primary shadow-sm">
+        <div class="card-header bg-primary text-white d-flex align-items-center gap-2">
+            <span class="fs-4 fw-bold">O</span>
+            <div>
+                <div class="fw-bold">Open/Closed Principle</div>
+                <small class="opacity-75">Open for extension, closed for modification.</small>
+            </div>
+            <span class="badge bg-light text-primary ms-auto fs-6">&#10003; Applied</span>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                New behaviour is added by introducing new implementations — not by editing existing code.
+                Interfaces act as the stable contracts that make this possible.
+            </p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="border rounded p-3 h-100">
+                        <h6 class="fw-bold text-primary">IIdempotencyStore</h6>
+                        <p class="small text-muted mb-1">
+                            Currently backed by <code>InMemoryIdempotencyStore</code>.
+                            A Redis or SQL implementation can be added without changing
+                            <code>IdempotencyFilter</code> or any caller.
+                        </p>
+                        <code class="small">IIdempotencyStore → InMemoryIdempotencyStore</code>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="border rounded p-3 h-100">
+                        <h6 class="fw-bold text-primary">ICustomerRepository</h6>
+                        <p class="small text-muted mb-1">
+                            Today the repository targets EF Core InMemory.
+                            Switching to PostgreSQL or SQL Server only requires a new
+                            <code>ICustomerRepository</code> implementation — business logic is untouched.
+                        </p>
+                        <code class="small">ICustomerRepository → CustomerRepository</code>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="border rounded p-3 h-100">
+                        <h6 class="fw-bold text-primary">Index Demo endpoints</h6>
+                        <p class="small text-muted mb-1">
+                            Each index type is a separate method in <code>IndexDemoService</code>
+                            with its own API endpoint. Adding a new index type requires only
+                            a new method and a new route — zero changes to existing code.
+                        </p>
+                        <code class="small">GET /api/demo/indexes/{type}</code>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="border rounded p-3 h-100">
+                        <h6 class="fw-bold text-primary">GlobalExceptionMiddleware</h6>
+                        <p class="small text-muted mb-1">
+                            New exception types can be handled by extending the <code>switch</code>
+                            inside the middleware — no other file needs to change.
+                        </p>
+                        <code class="small">catch → switch on exception type</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- L -->
+    <div class="card mb-4 border-info shadow-sm">
+        <div class="card-header bg-info text-dark d-flex align-items-center gap-2">
+            <span class="fs-4 fw-bold">L</span>
+            <div>
+                <div class="fw-bold">Liskov Substitution Principle</div>
+                <small class="opacity-75">Subtypes must be substitutable for their base types.</small>
+            </div>
+            <span class="badge bg-light text-dark ms-auto fs-6">&#10003; Applied</span>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                Every concrete implementation can replace its interface without altering the
+                correctness of the program. Callers never need to know which implementation is active.
+            </p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Interface</th>
+                            <th>Concrete Implementation</th>
+                            <th>Substitution guarantee</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>ICustomerRepository</code></td>
+                            <td><code>CustomerRepository</code></td>
+                            <td>All 17 contract methods are honoured — no exceptions thrown, no return types narrowed</td>
+                        </tr>
+                        <tr>
+                            <td><code>IIdempotencyStore</code></td>
+                            <td><code>InMemoryIdempotencyStore</code></td>
+                            <td><code>TryGet</code>, <code>Set</code>, and <code>GetLock</code> behave exactly as the interface promises — <code>IdempotencyFilter</code> is unaware of the concrete type</td>
+                        </tr>
+                        <tr>
+                            <td><code>ICustomerService</code></td>
+                            <td><code>CustomerService</code></td>
+                            <td>All use-case methods return the expected DTOs; no hidden side-effects beyond those implied by the contract</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="alert alert-light border mt-2 small mb-0">
+                <strong>Note on <code>Customer</code> entity:</strong> properties use <code>protected set</code>
+                so only the domain class itself can mutate state. This prevents subclasses or external code
+                from violating entity invariants — a LSP-safe design.
+            </div>
+        </div>
+    </div>
+
+    <!-- I -->
+    <div class="card mb-4 border-warning shadow-sm">
+        <div class="card-header bg-warning text-dark d-flex align-items-center gap-2">
+            <span class="fs-4 fw-bold">I</span>
+            <div>
+                <div class="fw-bold">Interface Segregation Principle</div>
+                <small class="opacity-75">Clients should not be forced to depend on interfaces they don't use.</small>
+            </div>
+            <span class="badge bg-light text-dark ms-auto fs-6">&#9888; Observed</span>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                The two demo-specific interfaces are intentionally broad — they consolidate many methods
+                to keep the portfolio codebase simple. This is a conscious trade-off, not an oversight.
+            </p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="border border-warning rounded p-3 h-100">
+                        <h6 class="fw-bold">ICustomerRepository <span class="badge bg-warning text-dark">17 methods</span></h6>
+                        <p class="small text-muted mb-2">
+                            In a production system this would be split into
+                            <code>ICustomerReadRepository</code> and <code>ICustomerWriteRepository</code>
+                            (CQRS), so read-only consumers are not forced to depend on write operations.
+                        </p>
+                        <span class="badge bg-light text-dark border">Portfolio trade-off: single entity, kept together for clarity</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="border border-success rounded p-3 h-100">
+                        <h6 class="fw-bold text-success">IIdempotencyStore <span class="badge bg-success">3 methods</span></h6>
+                        <p class="small text-muted mb-2">
+                            Perfectly segregated: <code>TryGet</code>, <code>Set</code>, <code>GetLock</code>.
+                            The filter only calls the methods it needs — no unused surface.
+                        </p>
+                        <span class="badge bg-success">ISP fully satisfied</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- D -->
+    <div class="card mb-4 border-dark shadow-sm">
+        <div class="card-header bg-dark text-white d-flex align-items-center gap-2">
+            <span class="fs-4 fw-bold">D</span>
+            <div>
+                <div class="fw-bold">Dependency Inversion Principle</div>
+                <small class="opacity-75">High-level modules must not depend on low-level modules — both depend on abstractions.</small>
+            </div>
+            <span class="badge bg-light text-dark ms-auto fs-6">&#10003; Applied</span>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                All wiring lives in <code>DependencyInjection.cs</code> (Infrastructure) and
+                <code>Program.cs</code> (Composition Root). Inner layers never reference outer layers.
+            </p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>High-level module</th>
+                            <th>Depends on abstraction</th>
+                            <th>NOT on concrete</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>CustomerService</code></td>
+                            <td><code>ICustomerRepository</code></td>
+                            <td><del class="text-danger">CustomerRepository</del></td>
+                        </tr>
+                        <tr>
+                            <td><code>IdempotencyFilter</code></td>
+                            <td><code>IIdempotencyStore</code></td>
+                            <td><del class="text-danger">InMemoryIdempotencyStore</del></td>
+                        </tr>
+                        <tr>
+                            <td><code>CustomerController</code></td>
+                            <td><code>ICustomerService</code></td>
+                            <td><del class="text-danger">CustomerService</del></td>
+                        </tr>
+                        <tr>
+                            <td><code>IndexDemoController</code></td>
+                            <td><code>IndexDemoService</code> (singleton via DI)</td>
+                            <td><del class="text-danger">new IndexDemoService()</del></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="alert alert-dark text-white mt-2 small mb-0">
+                <strong>Dependency flow:</strong>
+                <code>API → Application (interfaces) ← Infrastructure (implementations)</code><br/>
+                The Domain and Application layers have <strong>zero references</strong> to Infrastructure
+                assemblies. This is enforced by project-reference structure in the <code>.csproj</code> files.
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="card border-0 bg-light shadow-sm">
+        <div class="card-body">
+            <h5 class="fw-bold mb-3">Summary</h5>
+            <div class="row g-2 text-center">
+                <div class="col">
+                    <div class="p-3 rounded border border-success bg-white">
+                        <div class="fs-2">&#10003;</div>
+                        <div class="fw-bold text-success">S</div>
+                        <div class="small text-muted">Single Responsibility</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="p-3 rounded border border-primary bg-white">
+                        <div class="fs-2">&#10003;</div>
+                        <div class="fw-bold text-primary">O</div>
+                        <div class="small text-muted">Open / Closed</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="p-3 rounded border border-info bg-white">
+                        <div class="fs-2">&#10003;</div>
+                        <div class="fw-bold text-info">L</div>
+                        <div class="small text-muted">Liskov Substitution</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="p-3 rounded border border-warning bg-white">
+                        <div class="fs-2">&#9888;</div>
+                        <div class="fw-bold text-warning">I</div>
+                        <div class="small text-muted">Interface Segregation</div>
+                        <div class="small text-muted">(trade-off noted)</div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="p-3 rounded border border-dark bg-white">
+                        <div class="fs-2">&#10003;</div>
+                        <div class="fw-bold">D</div>
+                        <div class="small text-muted">Dependency Inversion</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

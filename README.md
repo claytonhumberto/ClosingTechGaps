@@ -1,5 +1,11 @@
 # ClosingTechGaps
 
+**Author:** Clayton Humberto  
+**Repository:** https://github.com/claytonhumberto/ClosingTechGaps  
+**Live demo:** https://reliable-victory-production.up.railway.app
+
+---
+
 A practical .NET 10 project built to demonstrate mastery of technical concepts identified as gaps during a developer interview. Each feature in this solution was intentionally chosen to address a specific weakness — showing not just awareness of the problem, but hands-on implementation of the solution.
 
 The project simulates a customer registration system with a REST API, an ASP.NET Razor Pages frontend, in-memory persistence, and full DDD layering.

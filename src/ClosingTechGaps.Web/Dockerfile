@@ -1,3 +1,4 @@
+# build-id: 2026-07-02
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 8080

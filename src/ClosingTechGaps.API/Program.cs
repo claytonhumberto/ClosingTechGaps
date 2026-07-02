@@ -28,15 +28,13 @@ var app = builder.Build();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors("AllowWeb");
 
-if (app.Environment.IsDevelopment())
+// Always expose API docs — this is a portfolio demo project
+app.MapOpenApi();
+app.MapScalarApiReference(options =>
 {
-    app.MapOpenApi();
-    app.MapScalarApiReference(options =>
-    {
-        options.Title = "ClosingTechGaps API";
-        options.Theme = ScalarTheme.Purple;
-    });
-}
+    options.Title = "ClosingTechGaps API";
+    options.Theme = ScalarTheme.Purple;
+});
 
 app.UseHttpsRedirection();
 app.MapControllers();

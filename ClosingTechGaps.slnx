@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ClosingTechGaps.API/ClosingTechGaps.API.csproj" />
+    <Project Path="src/ClosingTechGaps.Application/ClosingTechGaps.Application.csproj" />
+    <Project Path="src/ClosingTechGaps.Domain/ClosingTechGaps.Domain.csproj" />
+    <Project Path="src/ClosingTechGaps.Infrastructure/ClosingTechGaps.Infrastructure.csproj" />
+    <Project Path="src/ClosingTechGaps.Web/ClosingTechGaps.Web.csproj" />
+  </Folder>
+</Solution>

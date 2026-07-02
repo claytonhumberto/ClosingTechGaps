@@ -1,0 +1,173 @@
+@page
+@model ClosingTechGaps.Web.Pages.Customers.ComparisonModel
+@{
+    ViewData["Title"] = "IQueryable vs IEnumerable";
+
+    var q = Model.QueryableResult;
+    var e = Model.EnumerableResult;
+    var pageSize = Model.PageSize;
+    var currentPage = Model.CurrentPage;
+}
+
+<div class="container-fluid py-4">
+
+    <h2 class="mb-1">IQueryable <span class="text-muted fs-5">vs</span> IEnumerable</h2>
+    <p class="text-muted mb-4">
+        Both endpoints return the same page of customers. The difference is <strong>how much data travels from the database to memory</strong>.
+    </p>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card border-success h-100">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold fs-5">IQueryable</span>
+                    <span class="badge bg-white text-success">Recommended</span>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center g-2">
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-success">@q.ExecutionTimeMs ms</div>
+                            <div class="text-muted small">Execution time</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-success">@q.RecordsLoadedIntoMemory</div>
+                            <div class="text-muted small">Rows in memory</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-success">@q.TotalCount</div>
+                            <div class="text-muted small">Total in DB</div>
+                        </div>
+                    </div>
+                    <hr />
+                    <p class="mb-0 small text-muted">@q.StrategyExplanation</p>
+                </div>
+                <div class="card-footer text-success small">
+                    SQL generated: <code>SELECT ... ORDER BY Name OFFSET N ROWS FETCH NEXT @pageSize ROWS ONLY</code>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-danger h-100">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold fs-5">IEnumerable</span>
+                    <span class="badge bg-white text-danger">Avoid for large tables</span>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center g-2">
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-danger">@e.ExecutionTimeMs ms</div>
+                            <div class="text-muted small">Execution time</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-danger">@e.RecordsLoadedIntoMemory</div>
+                            <div class="text-muted small">Rows in memory</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-danger">@e.TotalCount</div>
+                            <div class="text-muted small">Total in DB</div>
+                        </div>
+                    </div>
+                    <hr />
+                    <p class="mb-0 small text-muted">@e.StrategyExplanation</p>
+                </div>
+                <div class="card-footer text-danger small">
+                    SQL generated: <code>SELECT * FROM Customers</code> -- then C# filtered the rest
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-secondary d-flex align-items-center gap-3 mb-4">
+        <span class="fs-4">&#128202;</span>
+        <div>
+            IEnumerable loaded <strong>@(e.RecordsLoadedIntoMemory - q.RecordsLoadedIntoMemory) extra rows</strong> into memory
+            and took
+            <strong>
+                @(Math.Abs(e.ExecutionTimeMs - q.ExecutionTimeMs)) ms
+                @(e.ExecutionTimeMs >= q.ExecutionTimeMs ? "more" : "less")
+            </strong>
+            than IQueryable.
+            With 2,000 rows the difference is small &mdash; imagine this with <strong>2,000,000 rows</strong>.
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small">Page size:</span>
+            <form method="get">
+                <input type="hidden" name="currentPage" value="1" />
+                <select name="pageSize" class="form-select form-select-sm" style="width:80px" onchange="this.form.submit()">
+                    @foreach (var s in new[] { 10, 20, 50, 100 })
+                    {
+                        <option value="@s" selected="@(s == pageSize)">@s</option>
+                    }
+                </select>
+            </form>
+        </div>
+        <small class="text-muted">
+            Showing @((currentPage - 1) * pageSize + 1)&ndash;@Math.Min(currentPage * pageSize, q.TotalCount) of @q.TotalCount customers
+        </small>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header text-muted small">
+            Data is identical &mdash; only the <em>path it took to get here</em> differs.
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0 small">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Name</th>
+                            <th>Birthday</th>
+                            <th>City / State</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in q.Items)
+                        {
+                            <tr>
+                                <td>@c.Name</td>
+                                <td>@c.BirthdayDate.ToString("MM/dd/yyyy")</td>
+                                <td>@c.Address.City / @c.Address.State</td>
+                                <td>@c.ContactInfo.Email</td>
+                                <td>@c.ContactInfo.Phone</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @{
+        int totalPages = q.TotalPages;
+        int startPage = Math.Max(1, currentPage - 2);
+        int endPage = Math.Min(totalPages, currentPage + 2);
+    }
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(!q.HasPreviousPage ? "disabled" : "")">
+                <a class="page-link" asp-page="./Comparison" asp-route-currentPage="1" asp-route-pageSize="@pageSize">&laquo;</a>
+            </li>
+            <li class="page-item @(!q.HasPreviousPage ? "disabled" : "")">
+                <a class="page-link" asp-page="./Comparison" asp-route-currentPage="@(currentPage - 1)" asp-route-pageSize="@pageSize">&lsaquo;</a>
+            </li>
+            @for (int p = startPage; p <= endPage; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link" asp-page="./Comparison" asp-route-currentPage="@p" asp-route-pageSize="@pageSize">@p</a>
+                </li>
+            }
+            <li class="page-item @(!q.HasNextPage ? "disabled" : "")">
+                <a class="page-link" asp-page="./Comparison" asp-route-currentPage="@(currentPage + 1)" asp-route-pageSize="@pageSize">&rsaquo;</a>
+            </li>
+            <li class="page-item @(!q.HasNextPage ? "disabled" : "")">
+                <a class="page-link" asp-page="./Comparison" asp-route-currentPage="@totalPages" asp-route-pageSize="@pageSize">&raquo;</a>
+            </li>
+        </ul>
+    </nav>
+</div>

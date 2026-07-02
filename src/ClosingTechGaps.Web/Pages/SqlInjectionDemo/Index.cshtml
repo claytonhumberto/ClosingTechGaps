@@ -1,0 +1,187 @@
+@page
+@model ClosingTechGaps.Web.Pages.SqlInjectionDemo.IndexModel
+@{
+    ViewData["Title"] = "SQL Injection Demo";
+}
+
+<div class="container-fluid py-4">
+
+    <h2 class="mb-1">SQL Injection Demo</h2>
+    <p class="text-muted mb-1">
+        Both panels run the <strong>same search</strong> against the same SQLite database.
+        One concatenates your input directly into SQL. The other uses a parameterized query.
+    </p>
+    <div class="alert alert-warning py-2 mb-4 small">
+        &#9888; This page exists purely for educational demonstration. The unsafe endpoint is intentionally vulnerable.
+        Never ship code like the unsafe example.
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-8">
+                    <label class="form-label fw-semibold">Search term (try an injection payload below)</label>
+                    <input type="text" name="searchTerm" value="@Model.SearchTerm"
+                           class="form-control font-monospace"
+                           placeholder="e.g.  Alice  or  ' OR '1'='1" />
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">Search</button>
+                </div>
+            </form>
+
+            <div class="mt-3">
+                <span class="text-muted small me-2">Quick payloads:</span>
+                @foreach (var payload in new[]
+                {
+                    "Alice",
+                    "' OR '1'='1",
+                    "' OR '1'='1' --",
+                    "admin' --",
+                    "' UNION SELECT Id,Email,Role,Role FROM Customers --"
+                })
+                {
+                    <a href="?searchTerm=@Uri.EscapeDataString(payload)"
+                       class="badge bg-secondary text-decoration-none me-1 mb-1 font-monospace">@payload</a>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (!Model.Searched)
+    {
+        <div class="text-center text-muted py-5">
+            <div class="fs-1">&#128270;</div>
+            <p>Enter a search term or click a quick payload above to see both APIs in action.</p>
+        </div>
+    }
+    else if (Model.UnsafeResult is not null && Model.SafeResult is not null)
+    {
+        <div class="row g-3">
+
+            @* ── UNSAFE ── *@
+            <div class="col-md-6">
+                <div class="card border-danger h-100">
+                    <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold fs-5">&#128274; Unsafe API</span>
+                        <span class="badge bg-white text-danger">String concatenation</span>
+                    </div>
+                    <div class="card-body">
+
+                        <p class="small text-muted mb-1">SQL executed on the server:</p>
+                        <pre class="bg-dark text-@(Model.UnsafeResult.DataLeaked ? "danger" : "warning") rounded p-2 small overflow-auto">@Model.UnsafeResult.SqlExecuted</pre>
+
+                        @if (Model.UnsafeResult.DataLeaked)
+                        {
+                            <div class="alert alert-danger py-2 small mb-2">
+                                <strong>&#128680; DATA BREACH</strong> &mdash; @Model.UnsafeResult.Warning
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning py-2 small mb-2">
+                                &#9888; @Model.UnsafeResult.Warning
+                            </div>
+                        }
+
+                        <p class="small fw-semibold mb-1">
+                            Records returned: <span class="badge bg-@(Model.UnsafeResult.DataLeaked ? "danger" : "secondary")">@Model.UnsafeResult.Records.Count()</span>
+                        </p>
+                        @if (Model.UnsafeResult.Records.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-0 small">
+                                    <thead class="table-dark">
+                                        <tr><th>Id</th><th>Name</th><th>Email</th><th>Role</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var r in Model.UnsafeResult.Records)
+                                        {
+                                            var isPrivileged = r.Role is "admin" or "system";
+                                            <tr class="@(isPrivileged ? "table-danger" : "")">
+                                                <td>@r.Id</td>
+                                                <td>@r.Name</td>
+                                                <td>@r.Email</td>
+                                                <td>
+                                                    <span class="badge bg-@(isPrivileged ? "danger" : "secondary")">@r.Role</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted small">No records returned.</p>
+                        }
+                    </div>
+                    <div class="card-footer small text-danger font-monospace">
+                        GET /api/demo/sql-injection/unsafe?name=@Uri.EscapeDataString(Model.SearchTerm)
+                    </div>
+                </div>
+            </div>
+
+            @* ── SAFE ── *@
+            <div class="col-md-6">
+                <div class="card border-success h-100">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold fs-5">&#128275; Safe API</span>
+                        <span class="badge bg-white text-success">Parameterized query</span>
+                    </div>
+                    <div class="card-body">
+
+                        <p class="small text-muted mb-1">SQL executed on the server:</p>
+                        <pre class="bg-dark text-success rounded p-2 small overflow-auto">@Model.SafeResult.SqlExecuted</pre>
+
+                        <div class="alert alert-success py-2 small mb-2">
+                            &#10003; @Model.SafeResult.Warning
+                        </div>
+
+                        <p class="small fw-semibold mb-1">
+                            Records returned: <span class="badge bg-secondary">@Model.SafeResult.Records.Count()</span>
+                        </p>
+                        @if (Model.SafeResult.Records.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-0 small">
+                                    <thead class="table-dark">
+                                        <tr><th>Id</th><th>Name</th><th>Email</th><th>Role</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var r in Model.SafeResult.Records)
+                                        {
+                                            <tr>
+                                                <td>@r.Id</td>
+                                                <td>@r.Name</td>
+                                                <td>@r.Email</td>
+                                                <td><span class="badge bg-secondary">@r.Role</span></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted small">
+                                No records matched &mdash; the injection payload was treated as a literal string, not as SQL.
+                            </p>
+                        }
+                    </div>
+                    <div class="card-footer small text-success font-monospace">
+                        GET /api/demo/sql-injection/safe?name=@Uri.EscapeDataString(Model.SearchTerm)
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-secondary mt-4 small">
+            <strong>What just happened?</strong>
+            The unsafe endpoint built the SQL as:
+            <code>WHERE Name LIKE '%@Model.SearchTerm%'</code> &mdash; your input became part of the SQL syntax.
+            The safe endpoint passed your input as <code>@@name = '@Model.SearchTerm'</code> &mdash; the database driver
+            escaped it and treated it as a plain value, regardless of what characters it contains.
+        </div>
+    }
+</div>

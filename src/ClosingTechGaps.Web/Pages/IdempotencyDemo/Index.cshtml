@@ -1,0 +1,194 @@
+@page
+@model ClosingTechGaps.Web.Pages.IdempotencyDemo.IndexModel
+@{
+    ViewData["Title"] = "Idempotency Demo";
+}
+
+<div class="container-fluid py-4">
+
+    <h2 class="mb-1">Idempotency Demo</h2>
+    <p class="text-muted mb-1">
+        Simulates a user double-clicking Submit or a network retry sending the same POST request multiple times.
+        Both panels create a customer with the same payload — <strong>5 requests fired simultaneously</strong>.
+    </p>
+    <div class="alert alert-info py-2 mb-4 small">
+        &#128161; <strong>Idempotency-Key</strong> is a client-generated unique token (e.g. a UUID) sent in the request header.
+        The server uses it to detect duplicates and return the original response instead of creating a new record.
+    </div>
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-6">
+            <div class="card border-danger h-100">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold fs-5">&#128682; Without Idempotency</span>
+                    <span class="badge bg-white text-danger">POST /api/customers</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        5 identical POST requests are fired at the same time.
+                        Each one creates a new customer — no protection against duplicates.
+                    </p>
+                    <button id="btnUnsafe" class="btn btn-danger w-100 mb-3" onclick="runDemo('unsafe')">
+                        &#9889; Fire 5 simultaneous requests (no key)
+                    </button>
+                    <div id="unsafeLog" class="bg-dark text-white rounded p-2 small font-monospace" style="min-height:120px;max-height:200px;overflow-y:auto">
+                        <span class="text-muted">Waiting...</span>
+                    </div>
+                    <div id="unsafeSummary" class="mt-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-success h-100">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold fs-5">&#128275; With Idempotency Key</span>
+                    <span class="badge bg-white text-success">POST /api/customers/idempotent</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        5 identical POST requests share the <strong>same <code>Idempotency-Key</code> header</strong>.
+                        Only the first one creates the customer — the rest return the cached response.
+                    </p>
+                    <button id="btnSafe" class="btn btn-success w-100 mb-3" onclick="runDemo('safe')">
+                        &#9889; Fire 5 simultaneous requests (with key)
+                    </button>
+                    <div id="safeLog" class="bg-dark text-white rounded p-2 small font-monospace" style="min-height:120px;max-height:200px;overflow-y:auto">
+                        <span class="text-muted">Waiting...</span>
+                    </div>
+                    <div id="safeSummary" class="mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header fw-semibold">How it works — request comparison</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <p class="small text-danger fw-semibold mb-1">Without Idempotency Key</p>
+                    <pre class="bg-dark text-danger rounded p-2 small">POST /api/customers
+Content-Type: application/json
+
+{ "name": "Test User", ... }
+
+<span class="text-muted">// Request 1 → 201 Created (id: aaa...)</span>
+<span class="text-muted">// Request 2 → 201 Created (id: bbb...)</span>
+<span class="text-muted">// Request 3 → 201 Created (id: ccc...)</span>
+<span class="text-muted">// 5 duplicates in the database</span></pre>
+                </div>
+                <div class="col-md-6">
+                    <p class="small text-success fw-semibold mb-1">With Idempotency Key</p>
+                    <pre class="bg-dark text-success rounded p-2 small">POST /api/customers/idempotent
+Content-Type: application/json
+Idempotency-Key: 550e8400-e29b-41d4-a716
+
+{ "name": "Test User", ... }
+
+<span class="text-muted">// Request 1 → 201 Created (id: aaa...)</span>
+<span class="text-muted">// Request 2 → 201 (cached, X-Idempotency-Replayed: true)</span>
+<span class="text-muted">// Request 3 → 201 (cached, same id: aaa...)</span>
+<span class="text-muted">// Only 1 record in the database</span></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dbState" class="card d-none">
+        <div class="card-header fw-semibold">Database state after the demo</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0 small">
+                    <thead class="table-dark">
+                        <tr><th>Id</th><th>Name</th><th>Email</th></tr>
+                    </thead>
+                    <tbody id="dbRows"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const API = 'http://localhost:5105';
+
+const PAYLOAD = {
+    name: "Demo User (Idempotency Test)",
+    birthdayDate: "1990-06-15",
+    address: { street: "123 Test Street", city: "Testville", state: "TS", zipCode: "12345-678", country: "Brasil" },
+    contactInfo: { email: "demo@@idempotency.test", phone: "(11) 91234-5678" }
+};
+
+async function runDemo(mode) {
+    const isUnsafe = mode === 'unsafe';
+    const logEl = document.getElementById(isUnsafe ? 'unsafeLog' : 'safeLog');
+    const summaryEl = document.getElementById(isUnsafe ? 'unsafeSummary' : 'safeSummary');
+    const btn = document.getElementById(isUnsafe ? 'btnUnsafe' : 'btnSafe');
+
+    btn.disabled = true;
+    logEl.innerHTML = '';
+    summaryEl.innerHTML = '';
+
+    const url = isUnsafe ? `${API}/api/customers` : `${API}/api/customers/idempotent`;
+    const idempotencyKey = crypto.randomUUID();
+
+    const requests = Array.from({ length: 5 }, (_, i) => {
+        const headers = { 'Content-Type': 'application/json' };
+        if (!isUnsafe) headers['Idempotency-Key'] = idempotencyKey;
+
+        return fetch(url, { method: 'POST', headers, body: JSON.stringify(PAYLOAD) })
+            .then(async r => {
+                const body = await r.json();
+                const replayed = r.headers.get('X-Idempotency-Replayed') === 'true';
+                return { index: i + 1, status: r.status, id: body.id, replayed };
+            });
+    });
+
+    const results = await Promise.allSettled(requests);
+    const uniqueIds = new Set();
+
+    results.forEach(r => {
+        if (r.status === 'fulfilled') {
+            const { index, status, id, replayed } = r.value;
+            uniqueIds.add(id);
+            const color = replayed ? 'text-warning' : 'text-success';
+            const tag = replayed ? ' [REPLAYED — no new record]' : ' [NEW RECORD CREATED]';
+            logEl.innerHTML += `<div class="${color}">Request ${index} → ${status} | id: ${id?.slice(0,8)}...${tag}</div>`;
+        } else {
+            logEl.innerHTML += `<div class="text-danger">Request failed: ${r.reason}</div>`;
+        }
+    });
+
+    const recordsCreated = uniqueIds.size;
+    const color = isUnsafe ? 'danger' : 'success';
+    const icon = isUnsafe ? '&#128680;' : '&#10003;';
+    summaryEl.innerHTML = `
+        <div class="alert alert-${color} py-2 small mb-0">
+            ${icon} <strong>${recordsCreated} unique record(s)</strong> created in the database
+            from 5 requests.
+            ${isUnsafe ? 'Each request produced a new duplicate.' : 'The Idempotency-Key ensured only one record was persisted.'}
+        </div>`;
+
+    await loadRecentCustomers();
+    btn.disabled = false;
+}
+
+async function loadRecentCustomers() {
+    try {
+        const r = await fetch(`${API}/api/customers/paged?page=1&pageSize=10`);
+        const data = await r.json();
+        const demo = data.items.filter(c => c.name === 'Demo User (Idempotency Test)');
+        if (demo.length === 0) return;
+
+        document.getElementById('dbState').classList.remove('d-none');
+        const tbody = document.getElementById('dbRows');
+        tbody.innerHTML = demo.map(c =>
+            `<tr><td class="font-monospace small">${c.id.slice(0,8)}...</td><td>${c.name}</td><td>${c.contactInfo.email}</td></tr>`
+        ).join('');
+    } catch {}
+}
+</script>
+}

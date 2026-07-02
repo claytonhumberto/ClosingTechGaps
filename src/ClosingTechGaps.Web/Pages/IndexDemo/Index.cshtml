@@ -1,0 +1,475 @@
+@page
+@model ClosingTechGaps.Web.Pages.IndexDemo.IndexModel
+@{
+    ViewData["Title"] = "Database Index Types Demo";
+}
+
+<div class="container-fluid py-4">
+    <h2 class="mb-1">Database Index Types</h2>
+    <p class="text-muted mb-3">
+        Live demo using a SQLite table with <strong>100,000 product rows</strong>.
+        Each tab shows the index definition, the <code>EXPLAIN QUERY PLAN</code> output, and the timing before vs after creating the index.
+    </p>
+
+    <div id="seedAlert" class="alert alert-warning d-none py-2 mb-3">
+        <span class="spinner-border spinner-border-sm me-2"></span>
+        Seeding 100,000 rows into SQLite — first load only, please wait...
+    </div>
+    <div id="seedReady" class="alert alert-success d-none py-2 mb-3 small">
+        &#10003; <strong id="rowCountMsg"></strong> rows ready. Click any tab to run the live demo.
+    </div>
+
+    <!-- Summary table -->
+    <div class="card mb-4">
+        <div class="card-header fw-semibold">Index types at a glance</div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-bordered mb-0 small">
+                <thead class="table-dark">
+                    <tr><th>Type</th><th>Main Use</th><th>Key Characteristic</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><span class="badge bg-primary">Clustered</span></td><td>Primary key lookup</td><td>Physically orders rows in the table by the index key</td></tr>
+                    <tr><td><span class="badge bg-secondary">Non-Clustered</span></td><td>Fast searches on any column</td><td>Separate B-tree; does not reorder the table</td></tr>
+                    <tr><td><span class="badge bg-success">Unique</span></td><td>Integrity constraints</td><td>Rejects duplicate values at the database level</td></tr>
+                    <tr><td><span class="badge bg-info text-dark">Covering</span></td><td>Avoid table lookup</td><td>Stores all needed columns inside the index leaf</td></tr>
+                    <tr><td><span class="badge bg-warning text-dark">Filtered</span></td><td>Specific subsets</td><td>Partial index — only indexes rows matching a predicate</td></tr>
+                    <tr><td><span class="badge bg-danger">Columnstore</span></td><td>Analytics / BI</td><td>Stores data column-by-column; massive compression for aggregations</td></tr>
+                    <tr><td><span class="badge bg-dark">Full-text</span></td><td>Textual search</td><td>Inverted index over tokenized text; far faster than LIKE '%term%'</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" id="indexTabs" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-clustered">Clustered</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-nc">Non-Clustered</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-unique">Unique</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-covering">Covering</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-filtered">Filtered</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-columnstore">Columnstore</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-fts">Full-text</button></li>
+    </ul>
+
+    <div class="tab-content">
+
+        <!-- ── CLUSTERED ── -->
+        <div class="tab-pane fade show active" id="tab-clustered">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><span class="badge bg-primary me-2">Clustered</span> Physically orders the table by the index key</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        In SQL Server the <code>PRIMARY KEY</code> creates a clustered index by default — rows are physically
+                        stored in key order on disk. SQLite uses an integer <code>rowid</code> as its internal clustered key;
+                        declaring <code>INTEGER PRIMARY KEY</code> aligns with it.
+                        The demo compares a <strong>primary key lookup</strong> (O(log n)) vs a <strong>full description scan</strong> (O(n)).
+                    </p>
+                    <pre class="bg-dark text-success rounded p-2 small">-- SQL Server: clustered by default on PRIMARY KEY
+CREATE TABLE products (
+    id   INT          PRIMARY KEY,   -- ← this IS the clustered index
+    name VARCHAR(200) NOT NULL,
+    ...
+);
+
+-- To create a non-default clustered index:
+CREATE CLUSTERED INDEX idx_cl_date ON products (created_at);</pre>
+                    <button class="btn btn-primary btn-sm mb-3" onclick="runDemo('clustered', this)">&#9889; Run Live Demo</button>
+                    <div class="demo-result d-none" id="res-clustered">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-success">PRIMARY KEY lookup (clustered path)</p>
+                                <pre class="bg-dark text-light rounded p-2 small" id="cl-pk-sql"></pre>
+                                <div class="bg-dark text-success rounded p-2 small font-monospace" id="cl-pk-plan"></div>
+                                <div class="mt-1 small" id="cl-pk-time"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-danger">Full scan (non-indexed column)</p>
+                                <pre class="bg-dark text-light rounded p-2 small" id="cl-scan-sql"></pre>
+                                <div class="bg-dark text-danger rounded p-2 small font-monospace" id="cl-scan-plan"></div>
+                                <div class="mt-1 small" id="cl-scan-time"></div>
+                            </div>
+                        </div>
+                        <div class="alert alert-primary small mt-3 py-2 mb-0" id="cl-takeaway"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── NON-CLUSTERED ── -->
+        <div class="tab-pane fade" id="tab-nc">
+            <div class="card">
+                <div class="card-header"><span class="badge bg-secondary me-2">Non-Clustered</span> Separate B-tree — fast searches without reordering the table</div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        A non-clustered index is a separate structure that holds the index key plus a pointer back to the row.
+                        Reads are fast; the table itself stays in insertion order. Most indexes you create are non-clustered.
+                    </p>
+                    <div class="row g-2 mb-3 align-items-end">
+                        <div class="col-auto">
+                            <label class="form-label small mb-1">Category</label>
+                            <select class="form-select form-select-sm" id="nc-cat">
+                                <option>Electronics</option><option>Books</option><option>Clothing</option>
+                                <option>Food</option><option>Sports</option><option>Toys</option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-secondary btn-sm" onclick="runDemo('nonclustered', this, {category: document.getElementById('nc-cat').value})">&#9889; Run Live Demo</button>
+                        </div>
+                    </div>
+                    <div class="demo-result d-none" id="res-nonclustered">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-danger">Without index — SCAN TABLE (full scan)</p>
+                                <div class="bg-dark text-danger rounded p-2 small font-monospace" id="nc-plan-off"></div>
+                                <div class="mt-1 small" id="nc-time-off"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-success">With index — SEARCH USING INDEX</p>
+                                <pre class="bg-dark text-success rounded p-2 small" id="nc-ddl"></pre>
+                                <div class="bg-dark text-success rounded p-2 small font-monospace" id="nc-plan-on"></div>
+                                <div class="mt-1 small" id="nc-time-on"></div>
+                            </div>
+                        </div>
+                        <pre class="bg-dark text-light rounded p-2 small mt-2" id="nc-query"></pre>
+                        <div class="alert alert-secondary small mt-2 py-2 mb-0" id="nc-takeaway"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── UNIQUE ── -->
+        <div class="tab-pane fade" id="tab-unique">
+            <div class="card">
+                <div class="card-header"><span class="badge bg-success me-2">Unique</span> Guarantees no duplicate values — enforced by the database</div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        A unique index rejects any INSERT or UPDATE that would create a duplicate in the indexed column(s).
+                        This is the correct place to enforce business uniqueness (e.g. SKU, email, CPF) — not in application code.
+                    </p>
+                    <pre class="bg-dark text-success rounded p-2 small">CREATE UNIQUE INDEX idx_sku ON products (sku);</pre>
+                    <button class="btn btn-success btn-sm mb-3" onclick="runDemo('unique', this)">&#9889; Try to Insert Duplicate SKU</button>
+                    <div class="demo-result d-none" id="res-unique">
+                        <p class="small fw-semibold mb-1">SQL attempted:</p>
+                        <pre class="bg-dark text-warning rounded p-2 small" id="uniq-sql"></pre>
+                        <div id="uniq-result"></div>
+                        <div class="alert alert-success small mt-2 py-2 mb-0">
+                            &#10003; The constraint fires at the <strong>database engine level</strong> — no application-level check needed.
+                            Works even if two API servers try to insert the same value simultaneously.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── COVERING ── -->
+        <div class="tab-pane fade" id="tab-covering">
+            <div class="card">
+                <div class="card-header"><span class="badge bg-info text-dark me-2">Covering</span> All required columns are stored in the index — no table lookup needed</div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        A regular index stores the key column(s) + a row pointer. To fetch the other columns the engine
+                        does a second read back to the table (<strong>Key Lookup</strong>). A covering index includes all columns
+                        the query needs, so the engine never touches the table.
+                    </p>
+                    <div class="row g-2 mb-3 align-items-end">
+                        <div class="col-auto">
+                            <label class="form-label small mb-1">Category</label>
+                            <select class="form-select form-select-sm" id="cov-cat">
+                                <option>Electronics</option><option>Books</option><option>Clothing</option>
+                                <option>Sports</option><option>Toys</option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-info btn-sm" onclick="runDemo('covering', this, {category: document.getElementById('cov-cat').value})">&#9889; Run Live Demo</button>
+                        </div>
+                    </div>
+                    <div class="demo-result d-none" id="res-covering">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-warning">Non-covering index (table lookup required)</p>
+                                <pre class="bg-dark text-warning rounded p-2 small" id="cov-nc-ddl"></pre>
+                                <div class="bg-dark text-warning rounded p-2 small font-monospace" id="cov-nc-plan"></div>
+                                <div class="mt-1 small" id="cov-nc-time"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-success">Covering index (index-only scan)</p>
+                                <pre class="bg-dark text-success rounded p-2 small" id="cov-cov-ddl"></pre>
+                                <div class="bg-dark text-success rounded p-2 small font-monospace" id="cov-cov-plan"></div>
+                                <div class="mt-1 small" id="cov-cov-time"></div>
+                            </div>
+                        </div>
+                        <pre class="bg-dark text-light rounded p-2 small mt-2" id="cov-query"></pre>
+                        <div class="alert alert-info small mt-2 py-2 mb-0" id="cov-takeaway"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── FILTERED ── -->
+        <div class="tab-pane fade" id="tab-filtered">
+            <div class="card">
+                <div class="card-header"><span class="badge bg-warning text-dark me-2">Filtered</span> Partial index — only indexes rows matching a predicate</div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        If most queries only access a subset (e.g. <code>WHERE is_active = 1</code>), a filtered index
+                        is smaller, faster to maintain, and produces better cardinality estimates than a full index on the same column.
+                    </p>
+                    <div class="row g-2 mb-3 align-items-end">
+                        <div class="col-auto">
+                            <label class="form-label small mb-1">Category</label>
+                            <select class="form-select form-select-sm" id="filt-cat">
+                                <option>Books</option><option>Electronics</option><option>Clothing</option>
+                                <option>Sports</option><option>Food</option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-warning btn-sm" onclick="runDemo('filtered', this, {category: document.getElementById('filt-cat').value})">&#9889; Run Live Demo</button>
+                        </div>
+                    </div>
+                    <div class="demo-result d-none" id="res-filtered">
+                        <div id="filt-stats" class="alert alert-secondary small py-2 mb-2"></div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-secondary">Full index on (category, is_active)</p>
+                                <pre class="bg-dark text-secondary rounded p-2 small" id="filt-full-ddl"></pre>
+                                <div class="bg-dark text-secondary rounded p-2 small font-monospace" id="filt-full-plan"></div>
+                                <div class="mt-1 small" id="filt-full-time"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-warning">Filtered index WHERE is_active = 1</p>
+                                <pre class="bg-dark text-warning rounded p-2 small" id="filt-filt-ddl"></pre>
+                                <div class="bg-dark text-warning rounded p-2 small font-monospace" id="filt-filt-plan"></div>
+                                <div class="mt-1 small" id="filt-filt-time"></div>
+                            </div>
+                        </div>
+                        <pre class="bg-dark text-light rounded p-2 small mt-2" id="filt-query"></pre>
+                        <div class="alert alert-warning small mt-2 py-2 mb-0" id="filt-takeaway"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── COLUMNSTORE ── -->
+        <div class="tab-pane fade" id="tab-columnstore">
+            <div class="card">
+                <div class="card-header"><span class="badge bg-danger me-2">Columnstore</span> Column-oriented storage — analytics and BI workloads</div>
+                <div class="card-body">
+                    <div class="alert alert-secondary small py-2">
+                        &#128712; Columnstore indexes are a <strong>SQL Server / Azure SQL</strong> feature.
+                        SQLite does not support them, so this tab shows the concept and syntax.
+                    </div>
+                    <p class="small text-muted">
+                        A traditional (row-store) index keeps all columns of a row together on the same page.
+                        A columnstore index stores each column separately, compressed. This means an aggregate like
+                        <code>SUM(price)</code> reads only the <em>price</em> column — not every row — enabling
+                        10x–100x compression and vectorized batch processing.
+                    </p>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <p class="fw-semibold small mb-1 text-danger">Row-store (traditional) — reads entire rows</p>
+                            <pre class="bg-dark text-danger rounded p-2 small">-- Table is stored row by row:
+-- [id=1, name=..., category=..., price=9.99, ...]
+-- [id=2, name=..., category=..., price=14.50, ...]
+-- Aggregation scans ALL columns of ALL rows
+
+SELECT category, SUM(price), COUNT(*)
+FROM   orders
+WHERE  created_at >= '2024-01-01'
+GROUP  BY category;
+-- I/O: reads EVERY column even though
+--       only category, price, created_at matter</pre>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="fw-semibold small mb-1 text-success">Columnstore — reads only needed columns</p>
+                            <pre class="bg-dark text-success rounded p-2 small">-- SQL Server syntax:
+CREATE NONCLUSTERED COLUMNSTORE INDEX
+    idx_cs_orders
+ON orders (category, price, created_at);
+
+-- or clustered (replaces row storage entirely):
+CREATE CLUSTERED COLUMNSTORE INDEX
+    idx_cs_orders ON orders;
+
+-- Same query is now:
+-- ✓ Reads only 3 columns (not all)
+-- ✓ Compressed column pages (RLE + bit-packing)
+-- ✓ Vectorized batch mode execution
+-- ✓ 10–100x faster on large aggregations</pre>
+                        </div>
+                    </div>
+                    <div class="alert alert-danger small mt-3 py-2 mb-0">
+                        <strong>When to use:</strong> Data warehouse tables, reports with GROUP BY / SUM / COUNT over millions of rows.
+                        <strong>When NOT to use:</strong> OLTP tables with frequent single-row INSERTs/UPDATEs (use row-store + non-clustered for those).
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── FULL-TEXT ── -->
+        <div class="tab-pane fade" id="tab-fts">
+            <div class="card">
+                <div class="card-header"><span class="badge bg-dark me-2">Full-text</span> Inverted index — fast textual search without LIKE '%term%'</div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        <code>LIKE '%term%'</code> cannot use any B-tree index and forces a full table scan.
+                        A full-text index tokenizes the text into an <strong>inverted index</strong> (term → row list),
+                        making arbitrary keyword search O(log n) instead of O(n).
+                    </p>
+                    <div class="row g-2 mb-3 align-items-end">
+                        <div class="col-auto">
+                            <label class="form-label small mb-1">Search term</label>
+                            <input type="text" class="form-control form-control-sm" id="fts-term" value="excellent features" style="width:200px">
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-dark btn-sm" onclick="runDemo('fulltext', this, {term: document.getElementById('fts-term').value})">&#9889; Run Live Demo</button>
+                        </div>
+                    </div>
+                    <div class="demo-result d-none" id="res-fulltext">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-danger">LIKE '%term%' — forces full table scan</p>
+                                <pre class="bg-dark text-danger rounded p-2 small" id="fts-like-sql"></pre>
+                                <div class="bg-dark text-danger rounded p-2 small font-monospace" id="fts-like-plan"></div>
+                                <div class="mt-1 small" id="fts-like-time"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="fw-semibold small mb-1 text-success">FTS5 MATCH — inverted index</p>
+                                <pre class="bg-dark text-success rounded p-2 small" id="fts-ddl"></pre>
+                                <pre class="bg-dark text-success rounded p-2 small" id="fts-fts-sql"></pre>
+                                <div class="bg-dark text-success rounded p-2 small font-monospace" id="fts-fts-plan"></div>
+                                <div class="mt-1 small" id="fts-fts-time"></div>
+                            </div>
+                        </div>
+                        <div class="alert alert-dark small mt-3 py-2 mb-0" id="fts-takeaway"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /tab-content -->
+</div>
+
+@section Scripts {
+<script>
+const API = 'http://localhost:5105';
+
+function speedBadge(before, after) {
+    if (after <= 0 || before <= 0) return '';
+    const x = (before / after).toFixed(1);
+    const color = x >= 3 ? 'success' : x >= 1.5 ? 'warning' : 'secondary';
+    return `<span class="badge bg-${color}">${x}x faster</span>`;
+}
+
+function timeLine(ms, label, color) {
+    return `<span class="text-${color} fw-semibold">${ms} ms</span> <span class="text-muted">(${label})</span>`;
+}
+
+async function checkSeed() {
+    try {
+        const r = await fetch(`${API}/api/demo/indexes/status`);
+        const d = await r.json();
+        if (d.isSeeded) {
+            document.getElementById('seedAlert').classList.add('d-none');
+            document.getElementById('seedReady').classList.remove('d-none');
+            document.getElementById('rowCountMsg').textContent = d.rowCount.toLocaleString();
+        } else {
+            document.getElementById('seedAlert').classList.remove('d-none');
+            setTimeout(checkSeed, 3000);
+        }
+    } catch { setTimeout(checkSeed, 3000); }
+}
+
+async function runDemo(type, btn, params = {}) {
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+    const qs = new URLSearchParams(params).toString();
+    const url = `${API}/api/demo/indexes/${type}${qs ? '?' + qs : ''}`;
+
+    try {
+        const r = await fetch(url);
+        const d = await r.json();
+        renderResult(type, d);
+        document.getElementById(`res-${type}`).classList.remove('d-none');
+    } catch(e) {
+        alert('Error: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#9889; Run Live Demo';
+    }
+}
+
+function renderResult(type, d) {
+    if (type === 'clustered') {
+        document.getElementById('cl-pk-sql').textContent   = d.pkQuerySql;
+        document.getElementById('cl-scan-sql').textContent = d.scanQuerySql;
+        document.getElementById('cl-pk-plan').textContent   = d.pkPlan;
+        document.getElementById('cl-scan-plan').textContent = d.scanPlan;
+        document.getElementById('cl-pk-time').innerHTML   = timeLine(d.timePkMs,   'PRIMARY KEY lookup', 'success');
+        document.getElementById('cl-scan-time').innerHTML = timeLine(d.timeScanMs, 'full description scan', 'danger');
+        document.getElementById('cl-takeaway').innerHTML =
+            `&#10003; PRIMARY KEY lookup took <strong>${d.timePkMs} ms</strong> vs <strong>${d.timeScanMs} ms</strong> for a full scan on an un-indexed column. ${speedBadge(d.timeScanMs, d.timePkMs)}`;
+    }
+    else if (type === 'nonclustered') {
+        document.getElementById('nc-ddl').textContent      = d.createIndexSql;
+        document.getElementById('nc-query').textContent    = d.querySql;
+        document.getElementById('nc-plan-off').textContent = d.planWithout;
+        document.getElementById('nc-plan-on').textContent  = d.planWith;
+        document.getElementById('nc-time-off').innerHTML = timeLine(d.timeWithoutMs, 'no index', 'danger');
+        document.getElementById('nc-time-on').innerHTML  = timeLine(d.timeWithMs,    'with index', 'success');
+        document.getElementById('nc-takeaway').innerHTML =
+            `&#10003; <strong>${d.category}</strong> filter: <strong>${d.timeWithoutMs} ms</strong> (scan) → <strong>${d.timeWithMs} ms</strong> (index). ${speedBadge(d.timeWithoutMs, d.timeWithMs)}`;
+    }
+    else if (type === 'unique') {
+        document.getElementById('uniq-sql').textContent = d.insertSql;
+        const el = document.getElementById('uniq-result');
+        if (d.constraintEnforced) {
+            el.innerHTML = `<div class="alert alert-danger py-2 small"><strong>&#128683; Constraint violated — INSERT rejected!</strong><br><code>${d.errorMessage}</code></div>`;
+        } else {
+            el.innerHTML = `<div class="alert alert-warning py-2 small">Hmm — the constraint did not fire. Check the demo setup.</div>`;
+        }
+    }
+    else if (type === 'covering') {
+        document.getElementById('cov-nc-ddl').textContent   = d.nonCoveringDdl;
+        document.getElementById('cov-cov-ddl').textContent  = d.coveringDdl;
+        document.getElementById('cov-query').textContent    = d.querySql;
+        document.getElementById('cov-nc-plan').textContent  = d.planNonCovering;
+        document.getElementById('cov-cov-plan').textContent = d.planCovering;
+        document.getElementById('cov-nc-time').innerHTML  = timeLine(d.timeNonCoveringMs, 'with table lookup', 'warning');
+        document.getElementById('cov-cov-time').innerHTML = timeLine(d.timeCoveringMs,    'index-only', 'success');
+        document.getElementById('cov-takeaway').innerHTML =
+            `&#10003; Covering index eliminated the table lookup: <strong>${d.timeNonCoveringMs} ms</strong> → <strong>${d.timeCoveringMs} ms</strong>. ${speedBadge(d.timeNonCoveringMs, d.timeCoveringMs)}
+             The query only needs <code>name</code> and <code>price</code> — storing them in the index avoids touching the data pages entirely.`;
+    }
+    else if (type === 'filtered') {
+        document.getElementById('filt-stats').innerHTML =
+            `Total rows: <strong>${d.totalRows.toLocaleString()}</strong> &bull; Inactive rows excluded from filtered index: <strong>${d.inactiveRows.toLocaleString()}</strong> (${(d.inactiveRows/d.totalRows*100).toFixed(1)}%)`;
+        document.getElementById('filt-full-ddl').textContent  = d.fullIndexDdl;
+        document.getElementById('filt-filt-ddl').textContent  = d.filteredIndexDdl;
+        document.getElementById('filt-query').textContent     = d.querySql;
+        document.getElementById('filt-full-plan').textContent = d.planFullIndex;
+        document.getElementById('filt-filt-plan').textContent = d.planFilteredIndex;
+        document.getElementById('filt-full-time').innerHTML  = timeLine(d.timeFullIndexMs,     'full index', 'secondary');
+        document.getElementById('filt-filt-time').innerHTML  = timeLine(d.timeFilteredIndexMs, 'filtered index', 'warning');
+        document.getElementById('filt-takeaway').innerHTML =
+            `&#10003; The filtered index is ~${(d.inactiveRows/d.totalRows*100).toFixed(0)}% smaller (skips inactive rows).
+             Smaller index = faster scans + less memory. Timing: <strong>${d.timeFullIndexMs} ms</strong> → <strong>${d.timeFilteredIndexMs} ms</strong>. ${speedBadge(d.timeFullIndexMs, d.timeFilteredIndexMs)}`;
+    }
+    else if (type === 'fulltext') {
+        document.getElementById('fts-ddl').textContent      = d.ftsDdl;
+        document.getElementById('fts-like-sql').textContent = d.likeQuerySql;
+        document.getElementById('fts-fts-sql').textContent  = d.ftsQuerySql;
+        document.getElementById('fts-like-plan').textContent = d.planLike;
+        document.getElementById('fts-fts-plan').textContent  = d.planFts;
+        document.getElementById('fts-like-time').innerHTML  = timeLine(d.timeLikeMs, 'LIKE full scan', 'danger');
+        document.getElementById('fts-fts-time').innerHTML   = timeLine(d.timeFtsMs,  'FTS5 MATCH', 'success');
+        document.getElementById('fts-takeaway').innerHTML =
+            `&#10003; FTS5 MATCH for "<strong>${d.term}</strong>": <strong>${d.timeLikeMs} ms</strong> (LIKE) → <strong>${d.timeFtsMs} ms</strong> (FTS). ${speedBadge(d.timeLikeMs, d.timeFtsMs)}
+             <code>LIKE '%term%'</code> cannot use any B-tree index; FTS5 uses an inverted index where each token maps to a list of matching rows.`;
+    }
+}
+
+checkSeed();
+</script>
+}

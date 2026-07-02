@@ -1,0 +1,277 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "ClosingTechGaps";
+}
+
+<div class="container py-5">
+
+    <div class="text-center mb-5">
+        <h1 class="display-5 fw-bold">ClosingTechGaps</h1>
+        <p class="lead text-muted col-md-8 mx-auto">
+            A practical .NET 10 project built to demonstrate mastery of technical concepts
+            identified as gaps during a developer interview. Each topic below links to a
+            live interactive demo.
+        </p>
+        <hr class="my-4" />
+    </div>
+
+    <div class="row g-4">
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-primary fs-6">1</span>
+                        <h5 class="card-title mb-0">Domain-Driven Design (DDD)</h5>
+                    </div>
+                    <p class="card-text text-muted small">
+                        Solution structured in four independent layers: <strong>Domain</strong>,
+                        <strong>Application</strong>, <strong>Infrastructure</strong> and <strong>API</strong>.
+                        Dependencies only flow inward — infrastructure never leaks into business rules.
+                        Value Objects (<code>Address</code>, <code>ContactInfo</code>) modeled as C# records
+                        with <code>OwnsOne</code> in EF Core.
+                    </p>
+                    <div class="mt-3">
+                        <span class="badge bg-secondary me-1">Entities</span>
+                        <span class="badge bg-secondary me-1">Value Objects</span>
+                        <span class="badge bg-secondary">Repository Pattern</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a asp-page="/Customers/Index" class="btn btn-sm btn-outline-primary">
+                        &#128196; View Customer List
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-primary fs-6">2</span>
+                        <h5 class="card-title mb-0">Pagination</h5>
+                    </div>
+                    <p class="card-text text-muted small">
+                        Unbounded queries fail in production. The API exposes
+                        <code>GET /api/customers/paged?page=1&amp;pageSize=20</code>
+                        using <code>Skip/Take</code> at the database level.
+                        Response includes <code>totalCount</code>, <code>totalPages</code>,
+                        <code>hasNextPage</code> and <code>hasPreviousPage</code>.
+                        Invalid page numbers redirect automatically to the last valid page.
+                    </p>
+                    <div class="mt-3">
+                        <span class="badge bg-secondary me-1">Skip / Take</span>
+                        <span class="badge bg-secondary me-1">Metadata</span>
+                        <span class="badge bg-secondary">Edge-case handling</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a asp-page="/Customers/Index" class="btn btn-sm btn-outline-primary">
+                        &#128202; View Paginated Table
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-warning">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-warning text-dark fs-6">3</span>
+                        <h5 class="card-title mb-0">IQueryable vs IEnumerable</h5>
+                    </div>
+                    <p class="card-text text-muted small">
+                        Breaking an <code>IQueryable</code> chain early forces EF Core to load
+                        <strong>every row</strong> before filtering in C#. The comparison page
+                        runs both strategies against 2,000 customers and shows — live — how many
+                        rows each one loaded into memory and how long it took.
+                    </p>
+                    <div class="mt-3">
+                        <span class="badge bg-warning text-dark me-1">N rows in memory</span>
+                        <span class="badge bg-success me-1">SQL-side filtering</span>
+                        <span class="badge bg-secondary">Performance metrics</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a asp-page="/Customers/Comparison" class="btn btn-sm btn-outline-warning">
+                        &#9889; Live Comparison
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-warning">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-warning text-dark fs-6">4</span>
+                        <h5 class="card-title mb-0">Lazy Loading vs Eager Loading — N+1</h5>
+                    </div>
+                    <p class="card-text text-muted small">
+                        Lazy loading fires one extra SQL query per entity in a loop — the N+1 problem.
+                        Loading 20 customers with their orders triggers <strong>22 queries</strong> with lazy loading
+                        vs <strong>2 queries</strong> with <code>.Include()</code>.
+                        The demo counts queries in real time and lets you change the page size to watch the gap grow.
+                    </p>
+                    <div class="mt-3">
+                        <span class="badge bg-danger me-1">N+1 Queries</span>
+                        <span class="badge bg-success me-1">Include / JOIN</span>
+                        <span class="badge bg-secondary">Query counter</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a asp-page="/Customers/LoadingComparison" class="btn btn-sm btn-outline-warning">
+                        &#9889; Live Comparison
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-danger">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-danger fs-6">5</span>
+                        <h5 class="card-title mb-0">SQL Injection</h5>
+                    </div>
+                    <p class="card-text text-muted small">
+                        Two live API endpoints search the same SQLite database.
+                        The <strong>unsafe</strong> one concatenates user input directly into the SQL string —
+                        type <code>' OR '1'='1</code> and every row (including privileged accounts) is exposed.
+                        The <strong>safe</strong> one uses a parameterized query —
+                        the same payload returns zero results.
+                    </p>
+                    <div class="mt-3">
+                        <span class="badge bg-danger me-1">String concatenation</span>
+                        <span class="badge bg-success me-1">SqliteParameter</span>
+                        <span class="badge bg-secondary">OWASP Top 10</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a asp-page="/SqlInjectionDemo/Index" class="btn btn-sm btn-outline-danger">
+                        &#128274; Interactive Demo
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-success">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-success fs-6">6</span>
+                        <h5 class="card-title mb-0">Idempotency</h5>
+                    </div>
+                    <p class="card-text text-muted small">
+                        A double-click or a network retry can fire the same POST twice —
+                        without idempotency each request creates a duplicate record.
+                        The safe endpoint accepts an <code>Idempotency-Key</code> header:
+                        the first call persists the record, subsequent calls return the
+                        <strong>same response</strong> (with <code>X-Idempotency-Replayed: true</code>)
+                        without touching the database.
+                    </p>
+                    <div class="mt-3">
+                        <span class="badge bg-danger me-1">Duplicate records</span>
+                        <span class="badge bg-success me-1">Idempotency-Key header</span>
+                        <span class="badge bg-secondary">IAsyncActionFilter</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a asp-page="/IdempotencyDemo/Index" class="btn btn-sm btn-outline-success">
+                        &#9889; Interactive Demo
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-primary fs-6">7</span>
+                        <h5 class="card-title mb-0">IHttpClientFactory &amp; In-Memory Database</h5>
+                    </div>
+                    <p class="card-text text-muted small">
+                        <code>new HttpClient()</code> leaks sockets under load — the Web project uses
+                        <code>IHttpClientFactory</code> with a named client for correct connection pooling.
+                        EF Core's <code>UseInMemoryDatabase</code> means the entire solution starts with
+                        <code>dotnet run</code> and no database engine installed. 2,000 customers and
+                        ~6,000 orders are seeded automatically on startup.
+                    </p>
+                    <div class="mt-3">
+                        <span class="badge bg-secondary me-1">IHttpClientFactory</span>
+                        <span class="badge bg-secondary me-1">EF InMemory</span>
+                        <span class="badge bg-secondary">Auto-seed</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a asp-page="/Customers/Index" class="btn btn-sm btn-outline-primary">
+                        &#128203; See it running
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-secondary">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-secondary fs-6">8</span>
+                        <h5 class="card-title mb-0">Database Index Types</h5>
+                    </div>
+                    <p class="card-text text-muted small">
+                        7 index types explained with live demos against 100,000 rows in SQLite:
+                        <strong>Clustered</strong> (PK lookup vs full scan),
+                        <strong>Non-Clustered</strong> (SCAN TABLE vs SEARCH USING INDEX with EXPLAIN QUERY PLAN),
+                        <strong>Unique</strong> (constraint enforcement live),
+                        <strong>Covering</strong> (index-only scan vs table lookup),
+                        <strong>Filtered</strong> (partial index),
+                        <strong>Full-text</strong> (LIKE vs FTS5), and
+                        <strong>Columnstore</strong> (conceptual — SQL Server analytics).
+                    </p>
+                    <div class="mt-3">
+                        <span class="badge bg-secondary me-1">EXPLAIN QUERY PLAN</span>
+                        <span class="badge bg-secondary me-1">Timing comparison</span>
+                        <span class="badge bg-secondary">SQLite FTS5</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a asp-page="/IndexDemo/Index" class="btn btn-sm btn-outline-secondary">
+                        &#128269; Interactive Demo
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row g-4 mt-2">
+        <div class="col-12">
+            <div class="card border-dark shadow-sm">
+                <div class="card-body d-flex align-items-center gap-4 flex-wrap">
+                    <div class="fs-1">&#128196;</div>
+                    <div class="flex-grow-1">
+                        <h5 class="mb-1">REST API — Scalar Interactive Docs</h5>
+                        <p class="text-muted small mb-0">
+                            All endpoints documented and executable directly in the browser.
+                            Includes every demo endpoint: paged customers, IQueryable/IEnumerable,
+                            Lazy/Eager loading, SQL Injection, Idempotency, and Index demos.
+                            Built with <strong>Microsoft.AspNetCore.OpenApi</strong> + <strong>Scalar</strong>
+                            — the modern Swagger UI replacement for .NET 10.
+                        </p>
+                    </div>
+                    <a href="http://localhost:5105/scalar/v1" target="_blank" class="btn btn-dark">
+                        &#128279; Open API Docs
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-center mt-5 text-muted small">
+        .NET 10 &bull; ASP.NET Core &bull; Entity Framework Core 10 &bull; Razor Pages &bull; Bootstrap 5
+    </div>
+
+</div>

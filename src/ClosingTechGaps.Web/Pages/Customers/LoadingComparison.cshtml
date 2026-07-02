@@ -1,0 +1,208 @@
+@page
+@model ClosingTechGaps.Web.Pages.Customers.LoadingComparisonModel
+@{
+    ViewData["Title"] = "Lazy Loading vs Eager Loading";
+
+    var lazy = Model.LazyResult;
+    var eager = Model.EagerResult;
+    var pageSize = Model.PageSize;
+    var currentPage = Model.CurrentPage;
+    int totalPages = eager.TotalPages;
+    int startPage = Math.Max(1, currentPage - 2);
+    int endPage = Math.Min(totalPages, currentPage + 2);
+}
+
+<div class="container-fluid py-4">
+
+    <h2 class="mb-1">Lazy Loading <span class="text-muted fs-5">vs</span> Eager Loading</h2>
+    <p class="text-muted mb-4">
+        Both strategies load the same customers <strong>with their orders</strong>.
+        The critical difference is <strong>how many round-trips to the database</strong> each one makes.
+    </p>
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-6">
+            <div class="card border-danger h-100">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold fs-5">Lazy Loading</span>
+                    <span class="badge bg-white text-danger">N+1 Problem</span>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center g-2 mb-3">
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-danger">@lazy.ExecutionTimeMs ms</div>
+                            <div class="text-muted small">Execution time</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-danger">@lazy.QueriesExecuted</div>
+                            <div class="text-muted small">DB queries fired</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-danger">@pageSize</div>
+                            <div class="text-muted small">Customers loaded</div>
+                        </div>
+                    </div>
+                    <hr />
+                    <p class="mb-2 small text-muted">@lazy.StrategyExplanation</p>
+                    <div class="bg-light rounded p-2 small font-monospace">
+                        <div class="text-muted">// Repository code</div>
+                        <div>var customers = await context.Customers</div>
+                        <div>&nbsp;&nbsp;.OrderBy(c => c.Name).Skip(...).Take(...)</div>
+                        <div>&nbsp;&nbsp;.ToListAsync(); <span class="text-danger">// Query #1</span></div>
+                        <div class="mt-1">foreach (var c in customers)</div>
+                        <div>&nbsp;&nbsp;_ = c.Orders.Count; <span class="text-danger">// Query #2..N+1</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-success h-100">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold fs-5">Eager Loading</span>
+                    <span class="badge bg-white text-success">Recommended</span>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center g-2 mb-3">
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-success">@eager.ExecutionTimeMs ms</div>
+                            <div class="text-muted small">Execution time</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-success">@eager.QueriesExecuted</div>
+                            <div class="text-muted small">DB queries fired</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="fs-2 fw-bold text-success">@pageSize</div>
+                            <div class="text-muted small">Customers loaded</div>
+                        </div>
+                    </div>
+                    <hr />
+                    <p class="mb-2 small text-muted">@eager.StrategyExplanation</p>
+                    <div class="bg-light rounded p-2 small font-monospace">
+                        <div class="text-muted">// Repository code</div>
+                        <div>var customers = await context.Customers</div>
+                        <div>&nbsp;&nbsp;<span class="text-success">.Include(c => c.Orders)</span></div>
+                        <div>&nbsp;&nbsp;.OrderBy(c => c.Name).Skip(...).Take(...)</div>
+                        <div>&nbsp;&nbsp;.ToListAsync(); <span class="text-success">// Single JOIN query</span></div>
+                        <div class="mt-1">foreach (var c in customers)</div>
+                        <div>&nbsp;&nbsp;_ = c.Orders.Count; <span class="text-success">// Already in memory</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-secondary d-flex align-items-center gap-3 mb-4">
+        <span class="fs-4">&#9889;</span>
+        <div>
+            Lazy Loading fired <strong>@(lazy.QueriesExecuted - eager.QueriesExecuted) extra queries</strong> compared to Eager Loading
+            and took <strong>@(Math.Abs(lazy.ExecutionTimeMs - eager.ExecutionTimeMs)) ms @(lazy.ExecutionTimeMs >= eager.ExecutionTimeMs ? "more" : "less")</strong>.
+            With a real database and network latency, each extra query adds ~1&ndash;5ms.
+            At <strong>@pageSize customers per page, that is @(lazy.QueriesExecuted - eager.QueriesExecuted) unnecessary round-trips per request</strong>.
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <span class="text-muted small">Page size:</span>
+            <form method="get">
+                <input type="hidden" name="currentPage" value="1" />
+                <select name="pageSize" class="form-select form-select-sm" style="width:80px" onchange="this.form.submit()">
+                    @foreach (var s in new[] { 5, 10, 20, 50 })
+                    {
+                        <option value="@s" selected="@(s == pageSize)">@s</option>
+                    }
+                </select>
+            </form>
+        </div>
+        <small class="text-muted">
+            Page @currentPage of @totalPages &mdash; @eager.TotalCount customers total
+        </small>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header text-muted small">
+            Customer list with orders &mdash; loaded via <strong>Eager Loading</strong> (same data, fewer queries)
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0 small">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Name</th>
+                            <th>City</th>
+                            <th>Orders</th>
+                            <th>Total Spent</th>
+                            <th>Last Order</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in eager.Items)
+                        {
+                            var orders = c.Orders.ToList();
+                            <tr>
+                                <td>@c.Name</td>
+                                <td>@c.Address.City</td>
+                                <td>
+                                    @if (orders.Count == 0)
+                                    {
+                                        <span class="text-muted">No orders</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-primary">@orders.Count</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (orders.Count > 0)
+                                    {
+                                        <span>$ @orders.Sum(o => o.Amount).ToString("N2")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (orders.Count > 0)
+                                    {
+                                        <span>@orders.Max(o => o.CreatedAt).ToString("MM/dd/yyyy")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">-</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <nav>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(!eager.HasPreviousPage ? "disabled" : "")">
+                <a class="page-link" asp-page="./LoadingComparison" asp-route-currentPage="1" asp-route-pageSize="@pageSize">&laquo;</a>
+            </li>
+            <li class="page-item @(!eager.HasPreviousPage ? "disabled" : "")">
+                <a class="page-link" asp-page="./LoadingComparison" asp-route-currentPage="@(currentPage - 1)" asp-route-pageSize="@pageSize">&lsaquo;</a>
+            </li>
+            @for (int p = startPage; p <= endPage; p++)
+            {
+                <li class="page-item @(p == currentPage ? "active" : "")">
+                    <a class="page-link" asp-page="./LoadingComparison" asp-route-currentPage="@p" asp-route-pageSize="@pageSize">@p</a>
+                </li>
+            }
+            <li class="page-item @(!eager.HasNextPage ? "disabled" : "")">
+                <a class="page-link" asp-page="./LoadingComparison" asp-route-currentPage="@(currentPage + 1)" asp-route-pageSize="@pageSize">&rsaquo;</a>
+            </li>
+            <li class="page-item @(!eager.HasNextPage ? "disabled" : "")">
+                <a class="page-link" asp-page="./LoadingComparison" asp-route-currentPage="@totalPages" asp-route-pageSize="@pageSize">&raquo;</a>
+            </li>
+        </ul>
+    </nav>
+</div>

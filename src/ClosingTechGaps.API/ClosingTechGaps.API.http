@@ -1,0 +1,6 @@
+@ClosingTechGaps.API_HostAddress = http://localhost:5105
+
+GET {{ClosingTechGaps.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

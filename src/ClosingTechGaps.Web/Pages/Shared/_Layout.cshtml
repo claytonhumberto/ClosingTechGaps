@@ -42,7 +42,7 @@
                             <a class="nav-link text-dark" asp-area="" asp-page="/IndexDemo/Index">Index Types</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" href="http://localhost:5105/scalar/v1" target="_blank">API Docs &#8599;</a>
+                            <a class="nav-link text-dark" href="@(ViewData["ApiBaseUrl"])/scalar/v1" target="_blank">API Docs &#8599;</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link text-dark" asp-area="" asp-page="/Privacy">Privacy</a>
@@ -64,6 +64,7 @@
         </div>
     </footer>
 
+    <script>window.API_BASE_URL = '@ViewData["ApiBaseUrl"]';</script>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>

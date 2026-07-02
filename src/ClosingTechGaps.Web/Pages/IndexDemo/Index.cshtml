@@ -353,7 +353,7 @@ CREATE CLUSTERED COLUMNSTORE INDEX
 
 @section Scripts {
 <script>
-const API = 'http://localhost:5105';
+const API = window.API_BASE_URL || 'http://localhost:5105';
 
 function speedBadge(before, after) {
     if (after <= 0 || before <= 0) return '';

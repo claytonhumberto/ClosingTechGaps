@@ -1,6 +1,11 @@
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddRazorPages();
+var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"] ?? "http://localhost:5105";
+
+builder.Services.AddRazorPages(options =>
+{
+    options.Conventions.ConfigureFilter(new ClosingTechGaps.Web.Filters.ApiBaseUrlFilter(apiBaseUrl));
+});
 
 builder.Services.AddHttpClient("CustomerApi", client =>
 {

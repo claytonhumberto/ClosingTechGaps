@@ -113,7 +113,7 @@ Idempotency-Key: 550e8400-e29b-41d4-a716
 
 @section Scripts {
 <script>
-const API = 'http://localhost:5105';
+const API = window.API_BASE_URL || 'http://localhost:5105';
 
 const PAYLOAD = {
     name: "Demo User (Idempotency Test)",

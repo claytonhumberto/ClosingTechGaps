@@ -1,6 +1,7 @@
 using ClosingTechGaps.Application.Interfaces;
 using ClosingTechGaps.Application.Services;
 using ClosingTechGaps.Domain.Repositories;
+using ClosingTechGaps.Infrastructure.ConcurrencyDemo;
 using ClosingTechGaps.Infrastructure.IndexDemo;
 using ClosingTechGaps.Infrastructure.Persistence;
 using ClosingTechGaps.Infrastructure.Persistence.Repositories;
@@ -23,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<SqlInjectionDemoService>();
         services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
         services.AddSingleton<IndexDemoService>();
+        services.AddSingleton<ConcurrencyDemoService>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<ICustomerService, CustomerService>();
 

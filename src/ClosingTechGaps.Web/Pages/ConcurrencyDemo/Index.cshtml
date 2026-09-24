@@ -1,0 +1,290 @@
+@page
+@model ClosingTechGaps.Web.Pages.ConcurrencyDemo.IndexModel
+@{
+    ViewData["Title"] = "Concurrency Demo";
+}
+
+<div class="container-fluid py-4">
+
+    <h2 class="mb-1">Preventing Double-Spending: Concurrent Transactions</h2>
+    <p class="text-muted mb-1">
+        A demo account starts with <strong>$6.00</strong>. Two <strong>$4.00</strong> debits are fired at the exact same time.
+        Only one should succeed — the account must never go negative.
+    </p>
+    <div class="alert alert-info py-2 mb-4 small">
+        &#128161; The unsafe endpoint reads the balance, checks it in C#, then writes unconditionally — a classic
+        read-check-write race. The safe endpoint lets the database itself decide, with one atomic
+        <code>UPDATE ... WHERE Balance &gt;= @@Amount</code> inside a transaction, plus a DB-enforced idempotency key.
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body d-flex flex-wrap align-items-center gap-3">
+            <button id="btnReset" class="btn btn-outline-primary" onclick="resetDemo()">&#8635; Reset demo account to $6.00</button>
+            <div>Current balance: <span id="currentBalance" class="fw-bold fs-5">—</span></div>
+            <div class="text-muted small">Outbox messages: <span id="outboxCount">0</span></div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-6">
+            <div class="card border-danger h-100">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold fs-5">&#128682; Naive (read-check-write)</span>
+                    <span class="badge bg-white text-danger">POST /debit/naive</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        No transaction, no <code>WHERE</code> guard on the <code>UPDATE</code>. A short artificial
+                        delay between the read and the write makes the race reproduce reliably for this demo.
+                    </p>
+                    <button id="btnNaive" class="btn btn-danger w-100 mb-3" onclick="fireNaive()">
+                        &#9889; Fire 2 simultaneous $4.00 debits
+                    </button>
+                    <div id="naiveLog" class="bg-dark text-white rounded p-2 small font-monospace" style="min-height:100px;max-height:180px;overflow-y:auto">
+                        <span class="text-muted">Waiting...</span>
+                    </div>
+                    <div id="naiveSummary" class="mt-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-success h-100">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold fs-5">&#128274; Safe (atomic conditional UPDATE)</span>
+                    <span class="badge bg-white text-success">POST /debit/safe</span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        <code>UPDATE Accounts SET Balance = Balance - @@amount WHERE Id = @@id AND Balance &gt;= @@amount</code>
+                        inside a transaction. Each request gets its own <code>Idempotency-Key</code>.
+                    </p>
+                    <button id="btnSafe" class="btn btn-success w-100 mb-3" onclick="fireSafe()">
+                        &#9889; Fire 2 simultaneous $4.00 debits
+                    </button>
+                    <div id="safeLog" class="bg-dark text-white rounded p-2 small font-monospace" style="min-height:100px;max-height:180px;overflow-y:auto">
+                        <span class="text-muted">Waiting...</span>
+                    </div>
+                    <div id="safeSummary" class="mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header fw-semibold">Idempotency retry — same key, called twice</div>
+        <div class="card-body">
+            <p class="small text-muted">
+                Sends <code>POST /debit/safe</code> twice in a row with the <strong>same</strong> <code>Idempotency-Key</code>
+                (a $1.00 debit). The second call must return the first call's payment instead of debiting again — enforced by a
+                <code>UNIQUE</code> constraint on <code>Payments.IdempotencyKey</code>, not just an in-memory check.
+            </p>
+            <button id="btnIdempotency" class="btn btn-outline-success mb-3" onclick="runIdempotencyCheck()">
+                &#9889; Send the same request twice
+            </button>
+            <div id="idempotencyLog" class="bg-dark text-white rounded p-2 small font-monospace" style="min-height:70px;max-height:150px;overflow-y:auto">
+                <span class="text-muted">Waiting...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Ledger</div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0 small">
+                            <thead class="table-dark">
+                                <tr><th>Type</th><th>Amount</th><th>Payment</th></tr>
+                            </thead>
+                            <tbody id="ledgerRows">
+                                <tr><td colspan="3" class="text-muted">No ledger entries yet.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Reversal &ne; Rollback</div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Reverses the most recent successful payment by adding a new offsetting ledger entry —
+                        the original payment record is never modified.
+                    </p>
+                    <button id="btnReverse" class="btn btn-outline-secondary w-100" onclick="reverseLastPayment()" disabled>
+                        &#8617; Reverse last payment
+                    </button>
+                    <div id="reverseResult" class="mt-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const API = window.API_BASE_URL || 'http://localhost:5105';
+const ACCOUNT_ID = 'demo-account';
+let lastSafePaymentId = null;
+
+function renderState(state) {
+    document.getElementById('currentBalance').textContent = `$${state.balance.toFixed(2)}`;
+    document.getElementById('outboxCount').textContent = state.outboxMessageCount;
+    const tbody = document.getElementById('ledgerRows');
+    if (!state.ledger || state.ledger.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-muted">No ledger entries yet.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = state.ledger.map(e => {
+        const negative = e.amount < 0;
+        return `<tr>
+            <td class="font-monospace">${e.type}</td>
+            <td class="${negative ? 'text-danger' : 'text-success'}">${negative ? '-' : '+'}$${Math.abs(e.amount).toFixed(2)}</td>
+            <td class="text-muted small font-monospace">${e.referenceId.slice(0, 8)}...</td>
+        </tr>`;
+    }).join('');
+}
+
+async function refreshState() {
+    const r = await fetch(`${API}/api/demo/concurrency/state/${ACCOUNT_ID}`);
+    const state = await r.json();
+    renderState(state);
+    return state;
+}
+
+async function resetDemo() {
+    const r = await fetch(`${API}/api/demo/concurrency/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startingBalance: 6.00 })
+    });
+    renderState(await r.json());
+    document.getElementById('naiveLog').innerHTML = '<span class="text-muted">Waiting...</span>';
+    document.getElementById('safeLog').innerHTML = '<span class="text-muted">Waiting...</span>';
+    document.getElementById('idempotencyLog').innerHTML = '<span class="text-muted">Waiting...</span>';
+    document.getElementById('naiveSummary').innerHTML = '';
+    document.getElementById('safeSummary').innerHTML = '';
+    document.getElementById('reverseResult').innerHTML = '';
+    lastSafePaymentId = null;
+    document.getElementById('btnReverse').disabled = true;
+}
+
+async function fireNaive() {
+    const btn = document.getElementById('btnNaive');
+    const log = document.getElementById('naiveLog');
+    const summary = document.getElementById('naiveSummary');
+    btn.disabled = true;
+    log.innerHTML = '';
+    summary.innerHTML = '';
+
+    const requests = [1, 2].map(index =>
+        fetch(`${API}/api/demo/concurrency/debit/naive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId: ACCOUNT_ID, amount: 4.00 })
+        }).then(async r => ({ index, ...(await r.json()) }))
+    );
+
+    const results = await Promise.allSettled(requests);
+    let successCount = 0;
+    results.forEach(r => {
+        if (r.status === 'fulfilled') {
+            const { index, success, status, balance, message } = r.value;
+            if (success) successCount++;
+            const color = success ? 'text-success' : 'text-warning';
+            log.innerHTML += `<div class="${color}">Request ${index} &rarr; ${status} | balance after: $${balance.toFixed(2)} | ${message}</div>`;
+        } else {
+            log.innerHTML += `<div class="text-danger">Request failed: ${r.reason}</div>`;
+        }
+    });
+
+    const finalState = await refreshState();
+    const wentNegative = finalState.balance < 0;
+    summary.innerHTML = `<div class="alert alert-${wentNegative ? 'danger' : 'warning'} py-2 small mb-0">
+        ${wentNegative ? '&#128680;' : '&#9888;&#65039;'} ${successCount} of 2 requests succeeded. Final balance: <strong>$${finalState.balance.toFixed(2)}</strong>
+        ${wentNegative ? ' &mdash; the account went negative. Both $4 debits were applied even though only $6 was available.' : ' &mdash; this race is timing-dependent, try resetting and firing again.'}
+    </div>`;
+    btn.disabled = false;
+}
+
+async function fireSafe() {
+    const btn = document.getElementById('btnSafe');
+    const log = document.getElementById('safeLog');
+    const summary = document.getElementById('safeSummary');
+    btn.disabled = true;
+    log.innerHTML = '';
+    summary.innerHTML = '';
+
+    const requests = [1, 2].map(index =>
+        fetch(`${API}/api/demo/concurrency/debit/safe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+            body: JSON.stringify({ accountId: ACCOUNT_ID, amount: 4.00 })
+        }).then(async r => ({ index, ...(await r.json()) }))
+    );
+
+    const results = await Promise.allSettled(requests);
+    let successCount = 0;
+    results.forEach(r => {
+        if (r.status === 'fulfilled') {
+            const { index, success, status, balance, paymentId, message } = r.value;
+            if (success) successCount++;
+            if (paymentId) lastSafePaymentId = paymentId;
+            const color = success ? 'text-success' : 'text-warning';
+            log.innerHTML += `<div class="${color}">Request ${index} &rarr; ${status} | balance after: $${balance.toFixed(2)} | ${message}</div>`;
+        } else {
+            log.innerHTML += `<div class="text-danger">Request failed: ${r.reason}</div>`;
+        }
+    });
+
+    const finalState = await refreshState();
+    summary.innerHTML = `<div class="alert alert-success py-2 small mb-0">
+        &#10003; Exactly ${successCount} of 2 requests succeeded. Final balance: <strong>$${finalState.balance.toFixed(2)}</strong> &mdash; never negative.
+    </div>`;
+    btn.disabled = false;
+    document.getElementById('btnReverse').disabled = !lastSafePaymentId;
+}
+
+async function runIdempotencyCheck() {
+    const btn = document.getElementById('btnIdempotency');
+    const log = document.getElementById('idempotencyLog');
+    btn.disabled = true;
+    log.innerHTML = '';
+
+    const key = crypto.randomUUID();
+    for (let i = 1; i <= 2; i++) {
+        const r = await fetch(`${API}/api/demo/concurrency/debit/safe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+            body: JSON.stringify({ accountId: ACCOUNT_ID, amount: 1.00 })
+        });
+        const body = await r.json();
+        if (body.paymentId) lastSafePaymentId = body.paymentId;
+        const color = body.replayed ? 'text-warning' : 'text-success';
+        const tag = body.replayed ? ' [REPLAYED &mdash; same payment, no new debit]' : ' [NEW DEBIT]';
+        log.innerHTML += `<div class="${color}">Call ${i} (same key) &rarr; ${body.status} | payment ${body.paymentId ? body.paymentId.slice(0, 8) : '—'}...${tag}</div>`;
+    }
+
+    await refreshState();
+    btn.disabled = false;
+    document.getElementById('btnReverse').disabled = !lastSafePaymentId;
+}
+
+async function reverseLastPayment() {
+    if (!lastSafePaymentId) return;
+    const btn = document.getElementById('btnReverse');
+    btn.disabled = true;
+    const r = await fetch(`${API}/api/demo/concurrency/reverse/${lastSafePaymentId}`, { method: 'POST' });
+    const body = await r.json();
+    document.getElementById('reverseResult').innerHTML = `<div class="alert alert-info py-2 small mb-0">${body.message}</div>`;
+    await refreshState();
+    lastSafePaymentId = null;
+}
+
+resetDemo();
+</script>
+}

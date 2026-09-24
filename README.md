@@ -316,6 +316,38 @@ Each demo shows the raw `EXPLAIN QUERY PLAN` output from SQLite alongside a timi
 
 ---
 
+### 12. Concurrency Control — Preventing Double-Spending
+
+**The gap:** Trusting an application-level check (`if (balance >= amount)`) to protect a financial invariant under concurrent access, without understanding that the check and the write are two separate operations a second request can slip between.
+
+**The danger:** Two requests debiting the same account at the same time can both read the same starting balance, both pass the check, and both write — letting an account with $6.00 successfully process two $4.00 debits. This is a classic race condition. It costs real money in financial systems, and the equivalent pattern (checking availability before consuming a limited resource) shows up anywhere concurrent requests compete for something finite: inventory, seats, coupons, credit limits.
+
+**How it was solved — live side-by-side comparison against a real database engine:**
+
+Unlike the rest of this project, this demo does **not** go through `AppDbContext` (EF Core's InMemory provider has no unique-constraint enforcement and no real atomic conditional update). It uses its own shared in-memory SQLite database (`ClosingTechGaps.Infrastructure/ConcurrencyDemo/ConcurrencyDemoService.cs`) so the comparison is honest — both variants run against a real SQL engine with real locking.
+
+```csharp
+// Naive — read, check in C#, write unconditionally. No transaction, no WHERE guard.
+var balance = await ReadBalanceAsync(accountId);
+if (balance < amount) return InsufficientFunds();
+await Task.Delay(50); // widens the race window so the demo reproduces reliably
+await ExecuteAsync("UPDATE Accounts SET Balance = Balance - @amount WHERE Id = @id", amount, accountId);
+
+// Safe — the database evaluates the condition and the write as one atomic operation.
+var rowsAffected = await ExecuteAsync(
+    "UPDATE Accounts SET Balance = Balance - @amount WHERE Id = @id AND Balance >= @amount",
+    amount, accountId);
+// rowsAffected == 1 → succeeded; rowsAffected == 0 → correctly rejected, no race possible
+```
+
+The safe endpoint also enforces idempotency at the database level — a `UNIQUE` constraint on `Payments.IdempotencyKey`, not just an in-process cache — so a retried request with the same key is detected even if two requests race to submit it simultaneously. Every successful debit writes a `LedgerEntries` row and an `OutboxMessages` row in the *same* transaction as the balance update, and a separate reversal endpoint demonstrates that reversing a committed payment is a new offsetting ledger entry, never a mutation of the original record.
+
+A demo page at `/ConcurrencyDemo` starts an account at $6.00 and fires two simultaneous $4.00 debits against each endpoint: the naive one lets the balance go negative, the safe one always rejects exactly one of the two requests and the balance never drops below zero.
+
+*(Companion article: ["Preventing Double Spending in .NET: Handling Concurrent Transactions Safely"](#) — link added once published.)*
+
+---
+
 ## Running Locally
 
 No database required. Start both projects:
